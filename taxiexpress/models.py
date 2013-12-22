@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.gis.db import models
 from django.template.defaultfilters import escape
 from datetime import datetime
+from django.contrib.auth.models import User
 
 #from django.core.urlresolvers import reverse
 
@@ -42,11 +43,7 @@ class Car(models.Model):
 
 
 class Driver(models.Model):
-    password = models.CharField(max_length=80)
-    email = models.EmailField(max_length=80)
-    phone = models.CharField(max_length=80)
-    first_name = models.CharField(max_length=80, blank=True, null=True)
-    last_name = models.CharField(max_length=80, blank=True, null=True)
+    user = models.OneToOneField(User)
     birthdate = models.DateField(blank=True, null=True)
     address = models.CharField(max_length=80, blank=True, null=True)
     postcode = models.CharField(max_length=5, blank=True, null=True)
@@ -67,14 +64,10 @@ class Driver(models.Model):
     objects = models.GeoManager()
 
     def __unicode__(self):
-        return self.email
+        return self.phone
 
 class Customer(models.Model):
-    password = models.CharField(max_length=80)
-    email = models.EmailField(max_length=80)
-    phone = models.CharField(max_length=80)
-    first_name = models.CharField(max_length=80, blank=True, null=True)
-    last_name = models.CharField(max_length=80, blank=True, null=True)
+    user = models.OneToOneField(User)
     birthdate = models.DateField(blank=True, null=True)
     postcode = models.CharField(max_length=5, blank=True, null=True)
     image = models.TextField(blank=True, null=True)
@@ -87,7 +80,7 @@ class Customer(models.Model):
     #Datos de pago
     favlist = models.ManyToManyField(Driver, related_name='+', blank=True, null=True)
     def __unicode__(self):
-        return self.email
+        return self.phone
 
 
 class Travel(models.Model):

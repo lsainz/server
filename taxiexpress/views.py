@@ -9,6 +9,7 @@ from django.shortcuts import render_to_response
 from django.views.decorators.csrf import csrf_exempt
 from django.template import RequestContext
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.contrib.auth.models import User
 from taxiexpress.models import Customer, Country, State, City, Driver
 from taxiexpress.serializers import CustomerSerializer, DriverSerializer
 from django.core.exceptions import ObjectDoesNotExist
@@ -26,20 +27,18 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.renderers import JSONRenderer
+from emailusernames.utils import create_user
+from emailusernames.utils import get_user, user_exists
+from django.contrib.auth import authenticate
 
 
 # Create your views here.
 @csrf_exempt
 @api_view(['POST'])
 def loginUser(request):
-    if request.POST['email'] is None:
-        return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Debes ingresar una dirección de email")
-    try:
-        customer = Customer.objects.get(email=request.POST['email'])  
-    except ObjectDoesNotExist:
-        return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Credenciales incorrectas email")
-    if customer.password == request.POST['password']:
+    user = authenticate(email=request.POST['email'], password=request.POST['password'])
+    if user:
+        customer = user.customer
         if customer.phone != request.POST['phone']:
             return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content=("Credenciales incorrectas phone" + customer.phone + request.POST['phone']))
         request.session['email'] = customer.email
@@ -53,14 +52,14 @@ def loginUser(request):
         else:
             return Response(status=status.HTTP_200_OK)
     else:
-        return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Credenciales incorrectas password")
+        return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Credenciales incorrectas")
 
 
 @csrf_exempt
 def registerUser(request):
     if request.method == "POST":
         passtemp = request.POST['password'];
-        if (Customer.objects.filter(email=request.POST['email']).count() > 0):
+        if user_exists(request.POST['email']):
             return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Email en uso")
         if (Customer.objects.filter(phone=request.POST['phone']).count() > 0):
             return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="Teléfono en uso")
@@ -68,7 +67,8 @@ def registerUser(request):
         #   return HttpResponse("shortpassword", content_type="text/plain")
         else:
             try:
-                c = Customer(username=request.POST['email'], password=passtemp, phone=request.POST['phone'], lastUpdate=datetime.strptime(request.POST['lastUpdate'], '%Y-%m-%d %H:%M:%S'))
+                u = create_user(request.POST['email'], passtemp)
+                c = Customer(user = u, phone=request.POST['phone'], lastUpdate=datetime.strptime(request.POST['lastUpdate'], '%Y-%m-%d %H:%M:%S'))
                 code = random.randint(1, 999999)
                 c.validationCode = code
                 c.save()
@@ -105,7 +105,8 @@ def getClosestTaxi(request):
 
 @api_view(['GET'])
 def test(request):
-    cu = Customer.objects.get(email='gorka_12@hotmail.com')
+    user = get_user('gorka_12@hotmail.com')
+    cu = user.customer
     lista = cu.favlist.all()
     return HttpResponse(status=status.HTTP_200_OK,content=lista)
 
@@ -122,7 +123,7 @@ def validateUser(request):
         except ObjectDoesNotExist:
             return HttpResponse(status=status.HTTP_401_UNAUTHORIZED, content="No es posible validar a este usuario")
         if customer.validationCode == request.GET['validationCode']:
-            customer.isValidated = true
+            customer.isValidated = True
             subject = 'Parking Express: Tu contraseña ha sido modificada'
             from_email = 'MyTaxiExpress@gmail.com'
             to = [customer.email]
@@ -138,13 +139,10 @@ def validateUser(request):
 @csrf_exempt
 def changePassword(request):
     #IMPORTANTE, el contenido del email no es correcto, hay que actualizarlo.
-    try:
-        customer = Customer.objects.get(email=request.POST['email'])
-    except ObjectDoesNotExist:
-        return HttpResponse(status=401, content="El email introducido no es válido")
-    if customer.password == request.POST['oldPass']:
-        customer.password = request.POST['newPass']  
-        customer.save()
+    user = authenticate(email=request.POST['email'], password=request.POST['password'])
+    if user:
+        user.password = request.POST['newPass']  
+        user.save()
         subject = 'Taxi Express: Tu contraseña ha sido modificada'
         from_email = 'MyTaxiExpress@gmail.com'
         to = [customer.email]
@@ -154,20 +152,21 @@ def changePassword(request):
         msg.send()  
         return HttpResponse(status=201,content="La contraseña ha sido modificada correctamente")
     else:
-        return HttpResponse(status=401, content="La contraseña actual es incorrecta")
+        return HttpResponse(status=401, content="Credenciales incorrectas")
 
 @api_view(['POST'])
 @csrf_exempt
 def updateProfile(request):
-    try:
-        customer = Customer.objects.get(email=request.POST['email'])
-    except ObjectDoesNotExist:
+    user = get_user(request.POST['email'])
+    if request.session['email'] == user.email:
+        user.first_name = request.POST['firstName']
+        user.last_name = request.POST['lastName']
+        user.customer.image = request.POST['newImage']
+        user.save()
+        return HttpResponse(status=201,content="Perfil del usuario modificado correctamente")
+    else:
         return HttpResponse(status=401, content="El email introducido no es válido")
-    customer.first_name = request.POST['firstName']
-    customer.last_name = request.POST['lastName']
-    customer.image = request.POST['newImage']
-    customer.save()
-    return HttpResponse(status=201,content="Perfil del usuario modificado correctamente")
+    
 
 @api_view(['POST'])
 @csrf_exempt
@@ -247,11 +246,23 @@ def loadData(request):
     ci.save()
     ci = City(code = 89, name = 'Urduliz', state = s)
     ci.save()
-    dr = Driver(email="conductor@gmail.com", password="1111", phone="656111112", first_name="Conductor", last_name="DePrimera", city=ci)
+    us = create_user('conductor@gmail.com', '1111')
+    us.first_name="Conductor"
+    us.last_name="DePrimera"
+    us.save()
+    dr = Driver(user=us, phone="656111112", city=ci)
     dr.save()
-    dr2 = Driver(email="conductor2@gmail.com", password="1111", phone="656111113", first_name="Conductor", last_name="DeSegunda", city=ci)
+    us = create_user('conductor2@gmail.com', '1111')
+    us.first_name="Conductor"
+    us.last_name="DeSegunda"
+    us.save()
+    dr2 = Driver(user=us, phone="656111113", city=ci)
     dr2.save()
-    cu = Customer(email="gorka_12@hotmail.com", password="1111", phone="656111111", first_name="Pepito", last_name="Palotes", city=ci, lastUpdate=datetime.strptime('1980-01-01 00:00:01','%Y-%m-%d %H:%M:%S'))
+    us = create_user('gorka_12@hotmail.com', '1111')
+    us.first_name="Pepito"
+    us.last_name="Palotes"
+    us.save()
+    cu = Customer(user=us, phone="656111111", city=ci, lastUpdate=datetime.strptime('1980-01-01 00:00:01','%Y-%m-%d %H:%M:%S'))
     cu.save()
     cu.favlist.add(dr)
     cu.favlist.add(dr2)

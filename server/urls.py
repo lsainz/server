@@ -1,5 +1,5 @@
 from django.conf.urls import patterns, include, url
-
+from emailusernames.forms import EmailAuthenticationForm
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
@@ -15,6 +15,7 @@ urlpatterns = patterns('',
     url(r'^client/changedetails', 'taxiexpress.views.updateProfile', name='updateProfile'),
     url(r'^client/changepassword', 'taxiexpress.views.changePassword', name='changePassword'),
     url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    url(r'^auth/login$', 'django.contrib.auth.views.login',{'authentication_form': EmailAuthenticationForm}, name='login'),
 
     # url(r'^server/', include('server.foo.urls')),
 

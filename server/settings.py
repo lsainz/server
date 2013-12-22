@@ -15,7 +15,7 @@ DATABASES = {
         'NAME': 'taxiexpress',                      # Or path to database file if using sqlite3.
         'USER': 'taxiexpress',                      # Not used with sqlite3.
         'PASSWORD': 'taxidessi',                  # Not used with sqlite3.
-        'HOST': 'taxi.cekfbmwqof8y.us-east-1.rds.amazonaws.com',                      # Set to empty string for localhost. Not used with sqlite3.
+        'HOST': '127.0.0.1',                      # Set to empty string for localhost. Not used with sqlite3.
         'PORT': '5432',                      # Set to empty string for default. Not used with sqlite3.
     }
 }
@@ -137,6 +137,7 @@ INSTALLED_APPS = (
     'django.contrib.gis',
     'rest_framework',
     'taxiexpress',
+    'emailusernames',
 )
 
 # A sample logging configuration. The only tangible logging
@@ -181,3 +182,7 @@ REST_FRAMEWORK = {
     # or allow read-only access for unauthenticated users.
 
 }
+
+AUTHENTICATION_BACKENDS = (
+    'emailusernames.backends.EmailAuthBackend',
+)
